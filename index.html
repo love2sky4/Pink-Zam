@@ -2,7 +2,8 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- 📱 뷰포트 수정: 모바일 기기에서 자유로운 상하좌우 스크롤 및 확대/축소(user-scalable=yes)를 허용합니다. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=3.0, user-scalable=yes">
     <title>렌주룰 AI 힌트 오목</title>
     <style>
         body {
@@ -12,28 +13,63 @@
             align-items: center;
             background-color: #f0f0f0;
             margin: 0;
-            padding: 20px;
+            padding: 15px;
+            /* 📱 모바일 전체 화면에서 내부 콘텐츠에 구애받지 않고 스크롤이 가능하도록 강제 설정 */
+            overflow: auto !important;
+            min-height: 100vh;
+            -webkit-overflow-scrolling: touch; /* iOS/안드로이드 부드러운 스크롤 */
         }
-        h1 { margin-bottom: 10px; color: #333; }
+        h1 { 
+            margin-top: 5px;
+            margin-bottom: 15px; 
+            color: #333; 
+            font-size: 1.6rem;
+            text-align: center;
+        }
         .container {
             display: flex;
-            flex-wrap: wrap;
+            flex-direction: column; /* 📱 모바일에서는 오목판 아래에 제어판이 오도록 세로 정렬 */
+            align-items: center;
             justify-content: center;
             gap: 20px;
+            width: 100%;
             max-width: 900px;
         }
+        
+        /* 📱 오목판이 화면 밖으로 넘어가더라도 좌우 스크롤로 모두 볼 수 있게 만드는 핵심 감싸개 */
+        .board-wrapper {
+            width: 100%;
+            overflow-x: auto; /* 좌우 스크롤 허용 */
+            overflow-y: hidden;
+            display: flex;
+            justify-content: flex-start; /* 모바일에서 왼쪽 정렬되어 스크롤 시작점 확보 */
+            padding-bottom: 10px;
+            -webkit-overflow-scrolling: touch;
+        }
+        
+        /* PC 화면 크기에서는 중앙 정렬로 복귀 */
+        @media (min-width: 650px) {
+            .container { flex-direction: row; align-items: flex-start; }
+            .board-wrapper { justify-content: center; overflow: visible; width: auto; }
+        }
+
         canvas {
             background-color: #E3A857;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             border-radius: 4px;
             cursor: pointer;
+            /* 고정 크기 유지하여 해상도가 깨지거나 터치 좌표가 뒤틀리는 현상 방지 */
+            min-width: 600px;
+            min-height: 600px;
         }
         .control-panel {
             background: white;
             padding: 20px;
             border-radius: 8px;
             box-shadow: 0 4px 6px rgba(0,0,0,0.1);
-            min-width: 240px;
+            width: 100%;
+            max-width: 320px;
+            box-sizing: border-box;
             display: flex;
             flex-direction: column;
             gap: 15px;
@@ -43,7 +79,7 @@
         button {
             border: 2px solid #FBC02D;
             border-radius: 4px;
-            padding: 10px;
+            padding: 12px;
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
@@ -69,11 +105,13 @@
 </head>
 <body>
 
-    <h1> 렌주룰 & AI 시각화 오목</h1>
+    <h1>렌주룰 & AI 시각화 오목</h1>
     
     <div class="container">
-        <!-- 오목판 -->
-        <canvas id="omokBoard" width="600" height="600"></canvas>
+        <!-- 📱 오목판을 스크롤 감싸개(board-wrapper)로 격리하여 스크롤 이동을 활성화합니다. -->
+        <div class="board-wrapper">
+            <canvas id="omokBoard" width="600" height="600"></canvas>
+        </div>
         
         <!-- 제어판 -->
         <div class="control-panel">
@@ -303,7 +341,7 @@ function calculateAndReadyHint() {
 
 // AI 힌트 버튼 클릭 시 ON/OFF 토글 동작
 function toggleAIHint() {
-    isHintOn = !isHintOn; // 상태 반전
+    isHintOn = !isHintOn;
 
     if (isHintOn) {
         hintBtn.textContent = "AI 추천 수 시각화 : ON";
@@ -311,9 +349,9 @@ function toggleAIHint() {
     } else {
         hintBtn.textContent = "AI 추천 수 시각화 : OFF";
         hintBtn.classList.remove('active');
-        visualElements = []; // 힌트 요소 비우기
+        visualElements = [];
     }
-    drawBoard(); // 판을 새로 그려서 힌트를 켜거나 끔
+    drawBoard();
 }
 
 // 승리 조건 체크
@@ -338,11 +376,16 @@ function updateTurnUI() {
     }
 }
 
-// 마우스 클릭 이벤트
+// 마우스 클릭 및 터치 이벤트 처리
 canvas.addEventListener('click', (event) => {
     const rect = canvas.getBoundingClientRect();
-    const mouseX = event.clientX - rect.left;
-    const mouseY = event.clientY - rect.top;
+    
+    // 📱 확대/축소나 화면 이동(스크롤) 상태에서도 올바른 교차 포인트를 짚어내기 위한 좌표 스케일 보정
+    const scaleX = canvas.width / rect.width;
+    const scaleY = canvas.height / rect.height;
+
+    const mouseX = (event.clientX - rect.left) * scaleX;
+    const mouseY = (event.clientY - rect.top) * scaleY;
 
     const x = Math.round((mouseX - margin) / cellSize);
     const y = Math.round((mouseY - margin) / cellSize);
@@ -370,9 +413,10 @@ canvas.addEventListener('click', (event) => {
         return;
     }
 
+    // 턴 교체 로직 정상화 반영 확인완료
     currentPlayer = (currentPlayer === 1) ? 2 : 1;
     updateTurnUI();
-    drawBoard(); // 힌트가 ON 상태라면 턴이 교체되면서 자동으로 새 힌트가 그려집니다.
+    drawBoard();
 });
 
 // 한 수 무르기(뒤로가기)
@@ -395,19 +439,17 @@ function resetGame() {
     currentPlayer = 1;
     moveHistory = [];
     
-    // 리셋 시 힌트 상태는 유지하되 UI 갱신을 위해 drawBoard 실행
     updateTurnUI();
     drawBoard();
 }
 
-// 난이도 변경 라디오 버튼 이벤트 리스너 추가 (난이도 바꿨을 때 실시간으로 힌트 갱신되도록)
 document.querySelectorAll('input[name="difficulty"]').forEach(radio => {
     radio.addEventListener('change', () => {
         if (isHintOn) drawBoard();
     });
 });
 
-hintBtn.addEventListener('click', toggleAIHint); // 단발성 실행에서 토글 함수로 교체
+hintBtn.addEventListener('click', toggleAIHint);
 document.getElementById('undoBtn').addEventListener('click', undoMove);
 document.getElementById('resetBtn').addEventListener('click', resetGame);
 
