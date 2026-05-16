@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>렌주룰 AI 힌트 오목</title>
+    <style>
+        body {
+            font-family: 'Malgun Gothic', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 { margin-bottom: 10px; color: #333; }
+        .container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 20px;
+            max-width: 900px;
+        }
+        canvas {
+            background-color: #E3A857;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .control-panel {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            min-width: 240px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        .panel-title { font-size: 1.2rem; font-weight: bold; border-bottom: 2px solid #eee; padding-bottom: 5px; }
+        .radio-group { display: flex; flex-direction: column; gap: 8px; }
+        button {
+            background-color: #FFF176;
+            border: 2px solid #FBC02D;
+            border-radius: 4px;
+            padding: 10px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background-color: #FFEE58; }
+        .rules { font-size: 0.85rem; color: #666; line-height: 1.5; background: #f9f9f9; padding: 10px; border-radius: 4px; }
+        .turn-info { font-weight: bold; font-size: 1.1rem; text-align: center; padding: 5px; border-radius: 4px; }
+        .black-turn { background: #000; color: #fff; }
+        .white-turn { background: #fff; color: #000; border: 1px solid #ccc; }
+    </style>
+</head>
+<body>
+
+    <h1> 렌주룰 & AI 시각화 오목</h1>
+    
+    <div class="container">
+        <!-- 오목판 -->
+        <canvas id="omokBoard" width="600" height="600"></canvas>
+        
+        <!-- 제어판 -->
+        <div class="control-panel">
+            <div class="panel-title">게임 제어</div>
+            <div id="turnDisplay" class="turn-info black-turn">흑돌(나) 차례</div>
+            
+            <div>
+                <div style="font-weight: bold; margin-bottom: 5px;">[ 난이도 선택 ]</div>
+                <div class="radio-group">
+                    <label><input type="radio" name="difficulty" value="Easy"> 하 (Easy)</label>
+                    <label><input type="radio" name="difficulty" value="Medium"> 중 (Medium)</label>
+                    <label><input type="radio" name="difficulty" value="Hard" checked> 상 (Hard)</label>
+                </div>
+            </div>
+            
+            <button id="hintBtn"> AI 추천 수 시각화</button>
+            <button id="undoBtn" style="background-color: #e0e0e0; border-color: #bdbdbd; color: #333;"> 한 수 무르기 (뒤로가기)</button>
+            <button id="resetBtn" style="background-color: #ff8a80; border-color: #e53935; color: white;"> 게임 리셋</button>
+            
+            <div class="rules">
+                <strong>※ 렌주룰(Renju) 적용</strong><br>
+                - 흑(선공): 33, 44, 장목(6목 이상) 금지<br>
+                - 백(후공): 제약 없음<br>
+                * 금수 자리는 AI 추천에서 제외됩니다.
+            </div>
+        </div>
+    </div>
+
+<script>
+const canvas = document.getElementById('omokBoard');
+const ctx = canvas.getContext('2d');
+const turnDisplay = document.getElementById('turnDisplay');
+
+const boardSize = 15;
+const cellSize = 40;
+const margin = 20;
+
+let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
+let currentPlayer = 1; // 1: 흑, 2: 백
+let visualElements = []; // 힌트 저장용
+let moveHistory = []; // 착수 기록 추적용 (무르기 기능에 사용)
+
+// 초기화 및 바둑판 그리기
+function drawBoard() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.strokeStyle = '#000000';
+    ctx.lineWidth = 1;
+
+    // 선 그리기
+    for (let i = 0; i < boardSize; i++) {
+        // 가로선
+        ctx.beginPath();
+        ctx.moveTo(margin, margin + i * cellSize);
+        ctx.lineTo(margin + (boardSize - 1) * cellSize, margin + i * cellSize);
+        ctx.stroke();
+
+        // 세로선
+        ctx.beginPath();
+        ctx.moveTo(margin + i * cellSize, margin);
+        ctx.lineTo(margin + i * cellSize, margin + (boardSize - 1) * cellSize);
+        ctx.stroke();
+    }
+
+    // 화점(정중앙 점) 그리기
+    const center = margin + 7 * cellSize;
+    ctx.beginPath();
+    ctx.arc(center, center, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = '#000000';
+    ctx.fill();
+
+    // 놓여진 돌 다시 그리기
+    for (let y = 0; y < boardSize; y++) {
+        for (let x = 0; x < boardSize; x++) {
+            if (board[y][x] !== 0) drawStone(x, y, board[y][x]);
+        }
+    }
+
+    // AI 힌트 메달 다시 그리기
+    visualElements.forEach(elem => elem());
+}
+
+function drawStone(x, y, player) {
+    const cx = margin + x * cellSize;
+    const cy = margin + y * cellSize;
+    const r = cellSize / 2 - 2;
+
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+    if (player === 1) {
+        ctx.fillStyle = '#000000';
+        ctx.fill();
+    } else {
+        ctx.fillStyle = '#ffffff';
+        ctx.fill();
+        ctx.strokeStyle = '#000000';
+        ctx.stroke();
+    }
+}
+
+// 연속된 돌 개수 계산 (방향성 파악)
+function countStones(x, y, dx, dy, player) {
+    let count = 1;
+    let openEnds = 0;
+
+    // 정방향
+    let nx = x + dx, ny = y + dy;
+    while (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === player) {
+        count++; nx += dx; ny += dy;
+    }
+    if (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === 0) openEnds++;
+
+    // 역방향
+    nx = x - dx; ny = y - dy;
+    while (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === player) {
+        count++; nx -= dx; ny -= dy;
+    }
+    if (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === 0) openEnds++;
+
+    return { count, openEnds };
+}
+
+// 렌주룰 금수 체크
+function checkForbidden(x, y, player) {
+    if (player !== 1) return { forbidden: false, reason: "" }; // 백은 제약 없음
+
+    const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    let threeCount = 0;
+    let fourCount = 0;
+
+    for (let [dx, dy] of directions) {
+        let { count, openEnds } = countStones(x, y, dx, dy, player);
+
+        if (count > 5) return { forbidden: true, reason: "장목(6목 이상)" };
+        if (count === 3 && openEnds === 2) threeCount++;
+        if (count === 4) fourCount++;
+    }
+
+    if (threeCount >= 2) return { forbidden: true, reason: "삼삼(3-3)" };
+    if (fourCount >= 2) return { forbidden: true, reason: "사사(4-4)" };
+
+    return { forbidden: false, reason: "" };
+}
+
+// AI 가중치 계산 엔진
+function evaluatePosition(x, y, player) {
+    const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    let score = 0;
+
+    for (let [dx, dy] of directions) {
+        let { count } = countStones(x, y, dx, dy, player);
+        if (count === 5) score += 100000;
+        else if (count === 4) score += 5000;
+        else if (count === 3) score += 500;
+        else if (count === 2) score += 50;
+    }
+    return score;
+}
+
+function getAIMoves() {
+    let moves = [];
+    for (let y = 0; y < boardSize; y++) {
+        for (let x = 0; x < boardSize; x++) {
+            if (board[y][x] === 0) {
+                if (currentPlayer === 1 && checkForbidden(x, y, 1).forbidden) continue;
+
+                let myScore = evaluatePosition(x, y, currentPlayer);
+                let enemy = currentPlayer === 1 ? 2 : 1;
+                let enemyScore = evaluatePosition(x, y, enemy);
+
+                let totalScore = myScore + (enemyScore * 1.2);
+                moves.push({ x, y, score: totalScore });
+            }
+        }
+    }
+    moves.sort((a, b) => b.score - a.score);
+    return moves;
+}
+
+// AI 힌트 메달 시각화 함수
+function showAIHint() {
+    visualElements = [];
+    let bestMoves = getAIMoves();
+    if (bestMoves.length === 0) return;
+
+    const diff = document.querySelector('input[name="difficulty"]:checked').value;
+    let displayMoves = [];
+
+    if (diff === "Easy" && bestMoves.length > 5) {
+        displayMoves = bestMoves.slice(0, 7).sort(() => 0.5 - Math.random()).slice(0, 3);
+    } else if (diff === "Medium" && bestMoves.length > 3) {
+        displayMoves = bestMoves.slice(0, 4).sort(() => 0.5 - Math.random()).slice(0, 3);
+    } else {
+        displayMoves = bestMoves.slice(0, 3); // Hard
+    }
+
+    const rankStyles = [
+        { bg: "#FFD700", text: "1" },
+        { bg: "#C0C0C0", text: "2" },
+        { bg: "#CD7F32", text: "3" }
+    ];
+
+    displayMoves.forEach((move, index) => {
+        if (index >= rankStyles.length) return;
+        const style = rankStyles[index];
+
+        visualElements.push(() => {
+            const cx = margin + move.x * cellSize;
+            const cy = margin + move.y * cellSize;
+            const r = cellSize / 3;
+
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+            ctx.fillStyle = style.bg;
+            ctx.fill();
+            ctx.strokeStyle = '#000000';
+            ctx.stroke();
+
+            ctx.fillStyle = '#000000';
+            ctx.font = 'bold 12px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(style.text, cx, cy);
+        });
+    });
+
+    drawBoard();
+}
+
+// 승리 조건 체크
+function checkWin(x, y, player) {
+    const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
+    for (let [dx, dy] of directions) {
+        let { count } = countStones(x, y, dx, dy, player);
+        if (player === 1 && count === 5) return true;
+        if (player === 2 && count >= 5) return true;
+    }
+    return false;
+}
+
+// UI 텍스트 및 디자인 갱신 함수
+function updateTurnUI() {
+    if(currentPlayer === 1) {
+        turnDisplay.textContent = "흑돌(나) 차례";
+        turnDisplay.className = "turn-info black-turn";
+    } else {
+        turnDisplay.textContent = "백돌(상대) 차례";
+        turnDisplay.className = "turn-info white-turn";
+    }
+}
+
+// 마우스 클릭 이벤트
+canvas.addEventListener('click', (event) => {
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = event.clientX - rect.left;
+    const mouseY = event.clientY - rect.top;
+
+    const x = Math.round((mouseX - margin) / cellSize);
+    const y = Math.round((mouseY - margin) / cellSize);
+
+    if (x < 0 || x >= boardSize || y < 0 || y >= boardSize) return;
+    if (board[y][x] !== 0) return;
+
+    // 렌주룰 금수 확인
+    if (currentPlayer === 1) {
+        const { forbidden, reason } = checkForbidden(x, y, 1);
+        if (forbidden) {
+            alert(`렌주룰 제한: ${reason} 자리는 착수할 수 없습니다!`);
+            return;
+        }
+    }
+
+    // 돌 착수 및 히스토리 기록 저장
+    board[y][x] = currentPlayer;
+    moveHistory.push({ x, y, player: currentPlayer });
+    visualElements = []; // 다음 턴이 되므로 기존 힌트 지우기
+
+    if (checkWin(x, y, currentPlayer)) {
+        drawBoard();
+        setTimeout(() => {
+            alert(`${currentPlayer === 1 ? '흑돌' : '백돌'}의 승리입니다!`);
+            resetGame();
+        }, 10);
+        return;
+    }
+
+    // 턴 교체
+    currentPlayer = (currentPlayer === 1) ? 2 : 1;
+    updateTurnUI();
+    drawBoard();
+});
+
+// 한 수 무르기(뒤로가기) 기능 함수
+function undoMove() {
+    if (moveHistory.length === 0) {
+        alert("되돌릴 기록이 없습니다!");
+        return;
+    }
+
+    // 가장 마지막에 둔 돌 정보 가져오기 및 제거
+    const lastMove = moveHistory.pop();
+    board[lastMove.y][lastMove.x] = 0; // 바둑판에서 돌 제거
+
+    // 턴을 직전 플레이어 상태로 되돌리기
+    currentPlayer = lastMove.player;
+    
+    visualElements = []; // 화면이 변하므로 힌트 제거
+    updateTurnUI();
+    drawBoard();
+}
+
+function resetGame() {
+    board = Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
+    currentPlayer = 1;
+    visualElements = [];
+    moveHistory = []; // 리셋 시 기록 초기화
+    updateTurnUI();
+    drawBoard();
+}
+
+document.getElementById('hintBtn').addEventListener('click', showAIHint);
+document.getElementById('undoBtn').addEventListener('click', undoMove); // 무르기 이벤트 연결
+document.getElementById('resetBtn').addEventListener('click', resetGame);
+
+// 첫 로드 시 드로잉
+drawBoard();
+</script>
+</body>
+</html>
