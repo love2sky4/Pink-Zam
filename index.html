@@ -2,7 +2,6 @@
 <html lang="ko">
 <head>
     <meta charset="UTF-8">
-    <!-- 📱 뷰포트 수정: 모바일 기기에서 자유로운 상하좌우 스크롤 및 확대/축소(user-scalable=yes)를 허용합니다. -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=3.0, user-scalable=yes">
     <title>렌주룰 AI 힌트 오목</title>
     <style>
@@ -14,10 +13,9 @@
             background-color: #f0f0f0;
             margin: 0;
             padding: 15px;
-            /* 📱 모바일 전체 화면에서 내부 콘텐츠에 구애받지 않고 스크롤이 가능하도록 강제 설정 */
             overflow: auto !important;
             min-height: 100vh;
-            -webkit-overflow-scrolling: touch; /* iOS/안드로이드 부드러운 스크롤 */
+            -webkit-overflow-scrolling: touch;
         }
         h1 { 
             margin-top: 5px;
@@ -28,37 +26,31 @@
         }
         .container {
             display: flex;
-            flex-direction: column; /* 📱 모바일에서는 오목판 아래에 제어판이 오도록 세로 정렬 */
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             gap: 20px;
             width: 100%;
             max-width: 900px;
         }
-        
-        /* 📱 오목판이 화면 밖으로 넘어가더라도 좌우 스크롤로 모두 볼 수 있게 만드는 핵심 감싸개 */
         .board-wrapper {
             width: 100%;
-            overflow-x: auto; /* 좌우 스크롤 허용 */
+            overflow-x: auto;
             overflow-y: hidden;
             display: flex;
-            justify-content: flex-start; /* 모바일에서 왼쪽 정렬되어 스크롤 시작점 확보 */
+            justify-content: flex-start;
             padding-bottom: 10px;
             -webkit-overflow-scrolling: touch;
         }
-        
-        /* PC 화면 크기에서는 중앙 정렬로 복귀 */
         @media (min-width: 650px) {
             .container { flex-direction: row; align-items: flex-start; }
             .board-wrapper { justify-content: center; overflow: visible; width: auto; }
         }
-
         canvas {
             background-color: #E3A857;
             box-shadow: 0 4px 10px rgba(0,0,0,0.3);
             border-radius: 4px;
             cursor: pointer;
-            /* 고정 크기 유지하여 해상도가 깨지거나 터치 좌표가 뒤틀리는 현상 방지 */
             min-width: 600px;
             min-height: 600px;
         }
@@ -85,13 +77,11 @@
             cursor: pointer;
             transition: all 0.2s;
         }
-        /* AI 힌트 버튼 기본 스타일 (OFF 상태) */
         #hintBtn {
             background-color: #f5f5f5;
             border-color: #ccc;
             color: #666;
         }
-        /* AI 힌트 버튼 활성화 스타일 (ON 상태) */
         #hintBtn.active {
             background-color: #FFF176;
             border-color: #FBC02D;
@@ -108,12 +98,10 @@
     <h1>렌주룰 & AI 시각화 오목</h1>
     
     <div class="container">
-        <!-- 📱 오목판을 스크롤 감싸개(board-wrapper)로 격리하여 스크롤 이동을 활성화합니다. -->
         <div class="board-wrapper">
             <canvas id="omokBoard" width="600" height="600"></canvas>
         </div>
         
-        <!-- 제어판 -->
         <div class="control-panel">
             <div class="panel-title">게임 제어</div>
             <div id="turnDisplay" class="turn-info black-turn">흑돌(나) 차례</div>
@@ -135,7 +123,9 @@
                 <strong>※ 렌주룰(Renju) 적용</strong><br>
                 - 흑(선공): 33, 44, 장목(6목 이상) 금지<br>
                 - 백(후공): 제약 없음<br>
-                * 금수 자리는 AI 추천에서 제외됩니다.
+                * 금수 자리는 AI 추천에서 제외됩니다.<br>
+                <span style="color: blue; font-weight: bold;">● 파랑</span>: 두면 바로 승리하는 자리<br>
+                <span style="color: red; font-weight: bold;">● 빨강</span>: 안 두면 바로 패배하는 자리
             </div>
         </div>
     </div>
@@ -152,17 +142,15 @@ const margin = 20;
 
 let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
 let currentPlayer = 1; // 1: 흑, 2: 백
-let visualElements = []; // 힌트 저장용
-let moveHistory = []; // 착수 기록 추적용
-let isHintOn = false; // AI 힌트 토글 상태 변수
+let visualElements = [];
+let moveHistory = [];
+let isHintOn = false;
 
-// 초기화 및 바둑판 그리기
 function drawBoard() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     ctx.strokeStyle = '#000000';
     ctx.lineWidth = 1;
 
-    // 선 그리기
     for (let i = 0; i < boardSize; i++) {
         ctx.beginPath();
         ctx.moveTo(margin, margin + i * cellSize);
@@ -175,21 +163,18 @@ function drawBoard() {
         ctx.stroke();
     }
 
-    // 화점(정중앙 점) 그리기
     const center = margin + 7 * cellSize;
     ctx.beginPath();
     ctx.arc(center, center, 4, 0, 2 * Math.PI);
     ctx.fillStyle = '#000000';
     ctx.fill();
 
-    // 놓여진 돌 다시 그리기
     for (let y = 0; y < boardSize; y++) {
         for (let x = 0; x < boardSize; x++) {
             if (board[y][x] !== 0) drawStone(x, y, board[y][x]);
         }
     }
 
-    // 힌트가 켜져있을 때만 AI 힌트 메달 그리기
     if (isHintOn) {
         calculateAndReadyHint();
         visualElements.forEach(elem => elem());
@@ -214,7 +199,6 @@ function drawStone(x, y, player) {
     }
 }
 
-// 연속된 돌 개수 계산
 function countStones(x, y, dx, dy, player) {
     let count = 1;
     let openEnds = 0;
@@ -234,7 +218,6 @@ function countStones(x, y, dx, dy, player) {
     return { count, openEnds };
 }
 
-// 렌주룰 금수 체크
 function checkForbidden(x, y, player) {
     if (player !== 1) return { forbidden: false, reason: "" };
 
@@ -256,19 +239,24 @@ function checkForbidden(x, y, player) {
     return { forbidden: false, reason: "" };
 }
 
-// AI 가중치 계산 엔진
 function evaluatePosition(x, y, player) {
     const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
     let score = 0;
+    let isWinMove = false;
 
     for (let [dx, dy] of directions) {
         let { count } = countStones(x, y, dx, dy, player);
+        
+        // 렌주룰 규칙 반영한 승리 조건 체크
+        if (player === 1 && count === 5) isWinMove = true;
+        if (player === 2 && count >= 5) isWinMove = true;
+
         if (count === 5) score += 100000;
         else if (count === 4) score += 5000;
         else if (count === 3) score += 500;
         else if (count === 2) score += 50;
     }
-    return score;
+    return { score, isWinMove };
 }
 
 function getAIMoves() {
@@ -278,12 +266,20 @@ function getAIMoves() {
             if (board[y][x] === 0) {
                 if (currentPlayer === 1 && checkForbidden(x, y, 1).forbidden) continue;
 
-                let myScore = evaluatePosition(x, y, currentPlayer);
+                let myEval = evaluatePosition(x, y, currentPlayer);
                 let enemy = currentPlayer === 1 ? 2 : 1;
-                let enemyScore = evaluatePosition(x, y, enemy);
+                let enemyEval = evaluatePosition(x, y, enemy);
 
-                let totalScore = myScore + (enemyScore * 1.2);
-                moves.push({ x, y, score: totalScore });
+                // 결정적인 공격/방어 상태 태그 지정
+                let type = "normal";
+                if (myEval.isWinMove) {
+                    type = "win";   // 두면 바로 이기는 자리 (파랑)
+                } else if (enemyEval.isWinMove) {
+                    type = "block"; // 안 두면 바로 지는 자리 (빨강)
+                }
+
+                let totalScore = myEval.score + (enemyEval.score * 1.2);
+                moves.push({ x, y, score: totalScore, type: type });
             }
         }
     }
@@ -291,12 +287,44 @@ function getAIMoves() {
     return moves;
 }
 
-// AI 힌트 계산 및 그리기 함수 등록
+// AI 힌트 계산 및 그리기 함수 (빨강, 파랑 조건 최우선 반영)
 function calculateAndReadyHint() {
     visualElements = [];
     let bestMoves = getAIMoves();
     if (bestMoves.length === 0) return;
 
+    // 1단계: 승리 확정(win)이나 필사 방어(block)가 있는지 먼저 필터링합니다.
+    let specialMoves = bestMoves.filter(m => m.type === "win" || m.type === "block");
+
+    if (specialMoves.length > 0) {
+        // 결정적인 자리가 있으면 일반 1,2,3 메달 대신 빨강/파랑 점만 강조하여 보여줍니다.
+        specialMoves.forEach(move => {
+            const color = (move.type === "win") ? "#00E5FF" : "#FF1744"; // 파랑(Win) / 빨강(Block)
+            const text = (move.type === "win") ? "승리" : "방어";
+
+            visualElements.push(() => {
+                const cx = margin + move.x * cellSize;
+                const cy = margin + move.y * cellSize;
+                const r = cellSize / 2.5;
+
+                ctx.beginPath();
+                ctx.arc(cx, cy, r, 0, 2 * Math.PI);
+                ctx.fillStyle = color;
+                ctx.fill();
+                ctx.strokeStyle = '#000000';
+                ctx.stroke();
+
+                ctx.fillStyle = (move.type === "win") ? '#000000' : '#ffffff';
+                ctx.font = 'bold 10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(text, cx, cy);
+            });
+        });
+        return; // 특별 노드 렌더링 후 조기 종료
+    }
+
+    // 2단계: 결정적인 자리가 없을 때만 기존 난이도별 1, 2, 3 메달을 표시합니다.
     const diff = document.querySelector('input[name="difficulty"]:checked').value;
     let displayMoves = [];
 
@@ -339,7 +367,6 @@ function calculateAndReadyHint() {
     });
 }
 
-// AI 힌트 버튼 클릭 시 ON/OFF 토글 동작
 function toggleAIHint() {
     isHintOn = !isHintOn;
 
@@ -354,7 +381,6 @@ function toggleAIHint() {
     drawBoard();
 }
 
-// 승리 조건 체크
 function checkWin(x, y, player) {
     const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
     for (let [dx, dy] of directions) {
@@ -365,7 +391,6 @@ function checkWin(x, y, player) {
     return false;
 }
 
-// UI 텍스트 및 디자인 갱신 함수
 function updateTurnUI() {
     if(currentPlayer === 1) {
         turnDisplay.textContent = "흑돌(나) 차례";
@@ -376,11 +401,8 @@ function updateTurnUI() {
     }
 }
 
-// 마우스 클릭 및 터치 이벤트 처리
 canvas.addEventListener('click', (event) => {
     const rect = canvas.getBoundingClientRect();
-    
-    // 📱 확대/축소나 화면 이동(스크롤) 상태에서도 올바른 교차 포인트를 짚어내기 위한 좌표 스케일 보정
     const scaleX = canvas.width / rect.width;
     const scaleY = canvas.height / rect.height;
 
@@ -413,13 +435,11 @@ canvas.addEventListener('click', (event) => {
         return;
     }
 
-    // 턴 교체 로직 정상화 반영 확인완료
     currentPlayer = (currentPlayer === 1) ? 2 : 1;
     updateTurnUI();
     drawBoard();
 });
 
-// 한 수 무르기(뒤로가기)
 function undoMove() {
     if (moveHistory.length === 0) {
         alert("되돌릴 기록이 없습니다!");
@@ -453,7 +473,6 @@ hintBtn.addEventListener('click', toggleAIHint);
 document.getElementById('undoBtn').addEventListener('click', undoMove);
 document.getElementById('resetBtn').addEventListener('click', resetGame);
 
-// 첫 로드 시 드로잉
 drawBoard();
 </script>
 </body>
