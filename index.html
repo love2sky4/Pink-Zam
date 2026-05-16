@@ -41,16 +41,26 @@
         .panel-title { font-size: 1.2rem; font-weight: bold; border-bottom: 2px solid #eee; padding-bottom: 5px; }
         .radio-group { display: flex; flex-direction: column; gap: 8px; }
         button {
-            background-color: #FFF176;
             border: 2px solid #FBC02D;
             border-radius: 4px;
             padding: 10px;
             font-size: 1rem;
             font-weight: bold;
             cursor: pointer;
-            transition: background 0.2s;
+            transition: all 0.2s;
         }
-        button:hover { background-color: #FFEE58; }
+        /* AI 힌트 버튼 기본 스타일 (OFF 상태) */
+        #hintBtn {
+            background-color: #f5f5f5;
+            border-color: #ccc;
+            color: #666;
+        }
+        /* AI 힌트 버튼 활성화 스타일 (ON 상태) */
+        #hintBtn.active {
+            background-color: #FFF176;
+            border-color: #FBC02D;
+            color: #000;
+        }
         .rules { font-size: 0.85rem; color: #666; line-height: 1.5; background: #f9f9f9; padding: 10px; border-radius: 4px; }
         .turn-info { font-weight: bold; font-size: 1.1rem; text-align: center; padding: 5px; border-radius: 4px; }
         .black-turn { background: #000; color: #fff; }
@@ -79,7 +89,7 @@
                 </div>
             </div>
             
-            <button id="hintBtn"> AI 추천 수 시각화</button>
+            <button id="hintBtn"> AI 추천 수 시각화 : OFF</button>
             <button id="undoBtn" style="background-color: #e0e0e0; border-color: #bdbdbd; color: #333;"> 한 수 무르기 (뒤로가기)</button>
             <button id="resetBtn" style="background-color: #ff8a80; border-color: #e53935; color: white;"> 게임 리셋</button>
             
@@ -96,6 +106,7 @@
 const canvas = document.getElementById('omokBoard');
 const ctx = canvas.getContext('2d');
 const turnDisplay = document.getElementById('turnDisplay');
+const hintBtn = document.getElementById('hintBtn');
 
 const boardSize = 15;
 const cellSize = 40;
@@ -104,7 +115,8 @@ const margin = 20;
 let board = Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
 let currentPlayer = 1; // 1: 흑, 2: 백
 let visualElements = []; // 힌트 저장용
-let moveHistory = []; // 착수 기록 추적용 (무르기 기능에 사용)
+let moveHistory = []; // 착수 기록 추적용
+let isHintOn = false; // AI 힌트 토글 상태 변수
 
 // 초기화 및 바둑판 그리기
 function drawBoard() {
@@ -114,13 +126,11 @@ function drawBoard() {
 
     // 선 그리기
     for (let i = 0; i < boardSize; i++) {
-        // 가로선
         ctx.beginPath();
         ctx.moveTo(margin, margin + i * cellSize);
         ctx.lineTo(margin + (boardSize - 1) * cellSize, margin + i * cellSize);
         ctx.stroke();
 
-        // 세로선
         ctx.beginPath();
         ctx.moveTo(margin + i * cellSize, margin);
         ctx.lineTo(margin + i * cellSize, margin + (boardSize - 1) * cellSize);
@@ -141,8 +151,11 @@ function drawBoard() {
         }
     }
 
-    // AI 힌트 메달 다시 그리기
-    visualElements.forEach(elem => elem());
+    // 힌트가 켜져있을 때만 AI 힌트 메달 그리기
+    if (isHintOn) {
+        calculateAndReadyHint();
+        visualElements.forEach(elem => elem());
+    }
 }
 
 function drawStone(x, y, player) {
@@ -163,19 +176,17 @@ function drawStone(x, y, player) {
     }
 }
 
-// 연속된 돌 개수 계산 (방향성 파악)
+// 연속된 돌 개수 계산
 function countStones(x, y, dx, dy, player) {
     let count = 1;
     let openEnds = 0;
 
-    // 정방향
     let nx = x + dx, ny = y + dy;
     while (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === player) {
         count++; nx += dx; ny += dy;
     }
     if (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === 0) openEnds++;
 
-    // 역방향
     nx = x - dx; ny = y - dy;
     while (nx >= 0 && nx < boardSize && ny >= 0 && ny < boardSize && board[ny][nx] === player) {
         count++; nx -= dx; ny -= dy;
@@ -187,7 +198,7 @@ function countStones(x, y, dx, dy, player) {
 
 // 렌주룰 금수 체크
 function checkForbidden(x, y, player) {
-    if (player !== 1) return { forbidden: false, reason: "" }; // 백은 제약 없음
+    if (player !== 1) return { forbidden: false, reason: "" };
 
     const directions = [[1, 0], [0, 1], [1, 1], [1, -1]];
     let threeCount = 0;
@@ -242,8 +253,8 @@ function getAIMoves() {
     return moves;
 }
 
-// AI 힌트 메달 시각화 함수
-function showAIHint() {
+// AI 힌트 계산 및 그리기 함수 등록
+function calculateAndReadyHint() {
     visualElements = [];
     let bestMoves = getAIMoves();
     if (bestMoves.length === 0) return;
@@ -256,7 +267,7 @@ function showAIHint() {
     } else if (diff === "Medium" && bestMoves.length > 3) {
         displayMoves = bestMoves.slice(0, 4).sort(() => 0.5 - Math.random()).slice(0, 3);
     } else {
-        displayMoves = bestMoves.slice(0, 3); // Hard
+        displayMoves = bestMoves.slice(0, 3);
     }
 
     const rankStyles = [
@@ -288,8 +299,21 @@ function showAIHint() {
             ctx.fillText(style.text, cx, cy);
         });
     });
+}
 
-    drawBoard();
+// AI 힌트 버튼 클릭 시 ON/OFF 토글 동작
+function toggleAIHint() {
+    isHintOn = !isHintOn; // 상태 반전
+
+    if (isHintOn) {
+        hintBtn.textContent = "AI 추천 수 시각화 : ON";
+        hintBtn.classList.add('active');
+    } else {
+        hintBtn.textContent = "AI 추천 수 시각화 : OFF";
+        hintBtn.classList.remove('active');
+        visualElements = []; // 힌트 요소 비우기
+    }
+    drawBoard(); // 판을 새로 그려서 힌트를 켜거나 끔
 }
 
 // 승리 조건 체크
@@ -326,7 +350,6 @@ canvas.addEventListener('click', (event) => {
     if (x < 0 || x >= boardSize || y < 0 || y >= boardSize) return;
     if (board[y][x] !== 0) return;
 
-    // 렌주룰 금수 확인
     if (currentPlayer === 1) {
         const { forbidden, reason } = checkForbidden(x, y, 1);
         if (forbidden) {
@@ -335,10 +358,8 @@ canvas.addEventListener('click', (event) => {
         }
     }
 
-    // 돌 착수 및 히스토리 기록 저장
     board[y][x] = currentPlayer;
     moveHistory.push({ x, y, player: currentPlayer });
-    visualElements = []; // 다음 턴이 되므로 기존 힌트 지우기
 
     if (checkWin(x, y, currentPlayer)) {
         drawBoard();
@@ -349,27 +370,22 @@ canvas.addEventListener('click', (event) => {
         return;
     }
 
-    // 턴 교체
     currentPlayer = (currentPlayer === 1) ? 2 : 1;
     updateTurnUI();
-    drawBoard();
+    drawBoard(); // 힌트가 ON 상태라면 턴이 교체되면서 자동으로 새 힌트가 그려집니다.
 });
 
-// 한 수 무르기(뒤로가기) 기능 함수
+// 한 수 무르기(뒤로가기)
 function undoMove() {
     if (moveHistory.length === 0) {
         alert("되돌릴 기록이 없습니다!");
         return;
     }
 
-    // 가장 마지막에 둔 돌 정보 가져오기 및 제거
     const lastMove = moveHistory.pop();
-    board[lastMove.y][lastMove.x] = 0; // 바둑판에서 돌 제거
-
-    // 턴을 직전 플레이어 상태로 되돌리기
+    board[lastMove.y][lastMove.x] = 0;
     currentPlayer = lastMove.player;
     
-    visualElements = []; // 화면이 변하므로 힌트 제거
     updateTurnUI();
     drawBoard();
 }
@@ -377,14 +393,22 @@ function undoMove() {
 function resetGame() {
     board = Array.from({ length: boardSize }, () => Array(boardSize).fill(0));
     currentPlayer = 1;
-    visualElements = [];
-    moveHistory = []; // 리셋 시 기록 초기화
+    moveHistory = [];
+    
+    // 리셋 시 힌트 상태는 유지하되 UI 갱신을 위해 drawBoard 실행
     updateTurnUI();
     drawBoard();
 }
 
-document.getElementById('hintBtn').addEventListener('click', showAIHint);
-document.getElementById('undoBtn').addEventListener('click', undoMove); // 무르기 이벤트 연결
+// 난이도 변경 라디오 버튼 이벤트 리스너 추가 (난이도 바꿨을 때 실시간으로 힌트 갱신되도록)
+document.querySelectorAll('input[name="difficulty"]').forEach(radio => {
+    radio.addEventListener('change', () => {
+        if (isHintOn) drawBoard();
+    });
+});
+
+hintBtn.addEventListener('click', toggleAIHint); // 단발성 실행에서 토글 함수로 교체
+document.getElementById('undoBtn').addEventListener('click', undoMove);
 document.getElementById('resetBtn').addEventListener('click', resetGame);
 
 // 첫 로드 시 드로잉
